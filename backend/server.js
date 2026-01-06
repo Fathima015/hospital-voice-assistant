@@ -1,37 +1,45 @@
 import express from 'express';
-import fs from 'fs';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Fix for missing __dirname in ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const CSV_FILE = './appointments.csv';
+const PORT = 4000;
+const DB_FILE = path.join(__dirname, 'appointments.json');
 
-// Create CSV header once
-if (!fs.existsSync(CSV_FILE)) {
-  fs.writeFileSync(
-    CSV_FILE,
-    'timestamp,patientName,department,doctorName,symptoms,sentiment,confidence\n'
-  );
+// Ensure DB file exists
+if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, JSON.stringify([]));
 }
 
 app.post('/log-appointment', (req, res) => {
-  const {
-    patientName,
-    department,
-    doctorName,
-    symptoms,
-    sentiment,
-    confidence
-  } = req.body;
-
-  const row = `"${new Date().toISOString()}","${patientName}","${department}","${doctorName}","${symptoms}","${sentiment}",${confidence}\n`;
-
-  fs.appendFileSync(CSV_FILE, row);
-  res.json({ success: true });
+    try {
+        const newEntry = {
+            id: Date.now(),
+            timestamp: new Date().toISOString(),
+            ...req.body
+        };
+        const fileContent = fs.readFileSync(DB_FILE, 'utf-8');
+        const currentData = JSON.parse(fileContent || '[]');
+        currentData.push(newEntry);
+        fs.writeFileSync(DB_FILE, JSON.stringify(currentData, null, 2));
+        
+        console.log(`[SAVED] Appointment for ${newEntry.patientName}`);
+        res.status(200).json({ success: true, id: newEntry.id });
+    } catch (error) {
+        console.error("Error:", error);
+        res.status(500).json({ success: false });
+    }
 });
 
-app.listen(4000, () => {
-  console.log('Backend running on http://localhost:4000');
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
 });
